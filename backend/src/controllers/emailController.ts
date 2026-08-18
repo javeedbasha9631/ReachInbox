@@ -11,10 +11,10 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (!config.brevo.apiKey) {
+    if (!config.gmail.user || !config.gmail.appPassword) {
       res.status(400).json({
         success: false,
-        error: 'BREVO_API_KEY is not configured. Please set it in the backend .env file.',
+        error: 'Email service not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in the backend .env file.',
       });
       return;
     }
@@ -186,6 +186,85 @@ export async function getSentEmails(req: Request, res: Response): Promise<void> 
   } catch (error) {
     console.error('Get sent emails error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch sent emails' });
+  }
+}
+
+export async function getHistoryEmails(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    const emails = await prisma.email.findMany({
+      where: { userId: req.user.id },
+      include: { sender: { select: { id: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const stats = {
+      total: emails.length,
+      scheduled: emails.filter((e) => e.status === 'SCHEDULED').length,
+      processing: emails.filter((e) => e.status === 'PROCESSING').length,
+      sent: emails.filter((e) => e.status === 'SENT').length,
+      failed: emails.filter((e) => e.status === 'FAILED').length,
+    };
+
+    res.json({ success: true, data: { emails, stats } });
+  } catch (error) {
+    console.error('Get history emails error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch email history' });
+  }
+}
+
+export async function deleteEmail(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+    const email = await prisma.email.findFirst({
+      where: { id, userId: req.user.id },
+    });
+
+    if (!email) {
+      res.status(404).json({ success: false, error: 'Email not found' });
+      return;
+    }
+
+    if (email.status === 'SCHEDULED' || email.status === 'PROCESSING') {
+      res.status(400).json({ success: false, error: 'Cannot delete scheduled emails. Cancel them first.' });
+      return;
+    }
+
+    await prisma.email.delete({ where: { id } });
+    res.json({ success: true, message: 'Email deleted' });
+  } catch (error) {
+    console.error('Delete email error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete email' });
+  }
+}
+
+export async function clearHistory(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    const result = await prisma.email.deleteMany({
+      where: {
+        userId: req.user.id,
+        status: { in: ['SENT', 'FAILED'] },
+      },
+    });
+
+    res.json({ success: true, message: `Cleared ${result.count} email(s) from history` });
+  } catch (error) {
+    console.error('Clear history error:', error);
+    res.status(500).json({ success: false, error: 'Failed to clear history' });
   }
 }
 

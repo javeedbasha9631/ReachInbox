@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ApiResponse, User, Email, Sender, ScheduleEmailPayload, ScheduleEmailResponse } from '../types';
+import { ApiResponse, User, Email, Sender, ScheduleEmailPayload, ScheduleEmailResponse, EmailHistoryResponse } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -54,6 +54,21 @@ export const emailApi = {
 
   getById: async (id: string): Promise<ApiResponse<Email>> => {
     const { data } = await api.get(`/emails/${id}`);
+    return data;
+  },
+
+  getHistory: async (): Promise<ApiResponse<EmailHistoryResponse>> => {
+    const { data } = await api.get('/emails/history');
+    return data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse> => {
+    const { data } = await api.delete(`/emails/${id}`);
+    return data;
+  },
+
+  clearHistory: async (): Promise<ApiResponse> => {
+    const { data } = await api.delete('/emails/history/clear');
     return data;
   },
 };

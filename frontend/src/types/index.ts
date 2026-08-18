@@ -59,3 +59,16 @@ export interface ScheduleEmailResponse {
   emails: Email[];
   totalScheduled: number;
 }
+
+export interface EmailHistoryStats {
+  total: number;
+  scheduled: number;
+  processing: number;
+  sent: number;
+  failed: number;
+}
+
+export interface EmailHistoryResponse {
+  emails: Email[];
+  stats: EmailHistoryStats;
+}
