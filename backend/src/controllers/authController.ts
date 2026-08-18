@@ -8,7 +8,7 @@ function generateToken(user: { id: string; googleId: string; name: string; email
   return jwt.sign(
     { id: user.id, googleId: user.googleId, name: user.name, email: user.email, avatar: user.avatar },
     config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn as string }
+    { expiresIn: 60 * 60 * 24 * 7 }
   );
 }
 
