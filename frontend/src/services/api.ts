@@ -41,19 +41,21 @@ export interface AuthConfig {
   devLoginEnabled: boolean;
 }
 
+const AUTH_BASE = 'https://reachinbox-backend-production-e3f2.up.railway.app';
+
 export const authApi = {
   getConfig: async (): Promise<ApiResponse<AuthConfig>> => {
-    const { data } = await axios.get('/auth/config', { withCredentials: true });
+    const { data } = await axios.get(`${AUTH_BASE}/auth/config`, { withCredentials: true });
     return data;
   },
 
   devLogin: async (): Promise<ApiResponse<User> & { token?: string }> => {
-    const { data } = await axios.post('/auth/dev-login', {}, { withCredentials: true });
+    const { data } = await axios.post(`${AUTH_BASE}/auth/dev-login`, {}, { withCredentials: true });
     return data;
   },
 
   getMe: async (): Promise<ApiResponse<User>> => {
-    const { data } = await axios.get('/auth/me', {
+    const { data } = await axios.get(`${AUTH_BASE}/auth/me`, {
       withCredentials: true,
       headers: { ...authHeaders() },
     });
@@ -61,7 +63,7 @@ export const authApi = {
   },
 
   logout: async (): Promise<ApiResponse> => {
-    const { data } = await axios.post('/auth/logout', {}, {
+    const { data } = await axios.post(`${AUTH_BASE}/auth/logout`, {}, {
       withCredentials: true,
       headers: { ...authHeaders() },
     });
