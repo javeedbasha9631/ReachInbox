@@ -92,7 +92,7 @@ async function processDirectly(emailId: string): Promise<void> {
   try {
     const result = await Promise.race([
       sendEmail(
-        config.gmail.user,
+        config.resend.fromEmail,
         'ReachInbox',
         email.recipient,
         email.subject,
@@ -228,7 +228,7 @@ export async function startEmailWorker(): Promise<Worker> {
         return { rescheduled: true, retryAfterMs: retryDelayMs };
       }
 
-      const fromEmail = config.gmail.user;
+      const fromEmail = config.resend.fromEmail;
 
       let result;
       try {

@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { config } from '../config';
 
 interface SendResult {
@@ -7,25 +7,16 @@ interface SendResult {
   error?: string;
 }
 
-let _transporter: nodemailer.Transporter | null = null;
+let _resend: Resend | null = null;
 
-function getTransporter(): nodemailer.Transporter {
-  if (!_transporter) {
-    if (!config.gmail.user || !config.gmail.appPassword) {
-      throw new Error('Gmail SMTP credentials not configured (GMAIL_USER / GMAIL_APP_PASSWORD)');
+function getResend(): Resend {
+  if (!_resend) {
+    if (!config.resend.apiKey) {
+      throw new Error('RESEND_API_KEY not configured');
     }
-    _transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: config.gmail.user,
-        pass: config.gmail.appPassword,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
+    _resend = new Resend(config.resend.apiKey);
   }
-  return _transporter;
+  return _resend;
 }
 
 export async function sendEmail(
@@ -36,27 +27,36 @@ export async function sendEmail(
   body: string
 ): Promise<SendResult> {
   try {
-    const transporter = getTransporter();
+    const resend = getResend();
     const htmlBody = body.replace(/\n/g, '<br>');
 
-    const info = await transporter.sendMail({
-      from: `"${senderName || 'ReachInbox'}" <${config.gmail.user}>`,
-      to,
+    const fromAddress = config.resend.fromEmail || 'onboarding@resend.dev';
+    const displayName = senderName || 'ReachInbox';
+    const from = `${displayName} <${fromAddress}>`;
+
+    const { data, error } = await resend.emails.send({
+      from,
+      to: [to],
       subject,
       html: `<div style="font-family: Arial, sans-serif;">${htmlBody}</div>`,
     });
 
-    console.log(`Email sent to ${to}, Message ID: ${info.messageId}`);
+    if (error) {
+      console.error(`Resend email failed to ${to}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    console.log(`Email sent to ${to}, ID: ${data?.id}`);
     return {
       success: true,
-      messageId: info.messageId,
+      messageId: data?.id || 'unknown',
     };
   } catch (error) {
     const err = error as Error;
     console.error(`Email send failed to ${to}:`, err.message);
-
-    _transporter = null;
-
     return {
       success: false,
       error: err.message,

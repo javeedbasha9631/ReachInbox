@@ -11,10 +11,10 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (!config.gmail.user || !config.gmail.appPassword) {
+    if (!config.resend.apiKey) {
       res.status(400).json({
         success: false,
-        error: 'Email service not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in the backend .env file.',
+        error: 'Email service not configured. Please set RESEND_API_KEY in the backend environment variables.',
       });
       return;
     }
