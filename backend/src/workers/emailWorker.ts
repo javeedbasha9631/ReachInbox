@@ -92,14 +92,15 @@ async function processDirectly(emailId: string): Promise<void> {
   try {
     const result = await Promise.race([
       sendEmail(
-        config.resend.fromEmail,
+        config.gmail.user,
         'ReachInbox',
         email.recipient,
         email.subject,
-        email.body
+        email.body,
+        email.userId
       ),
       new Promise<{ success: false; error: string }>((_, reject) =>
-        setTimeout(() => reject(new Error('SMTP timeout after 30s')), 30000)
+        setTimeout(() => reject(new Error('Send timeout after 30s')), 30000)
       ),
     ]);
 
@@ -228,7 +229,7 @@ export async function startEmailWorker(): Promise<Worker> {
         return { rescheduled: true, retryAfterMs: retryDelayMs };
       }
 
-      const fromEmail = config.resend.fromEmail;
+      const fromEmail = config.gmail.user;
 
       let result;
       try {
@@ -238,7 +239,8 @@ export async function startEmailWorker(): Promise<Worker> {
             senderName || 'ReachInbox',
             recipient,
             subject,
-            body
+            body,
+            job.data.userId
           ),
           new Promise<{ success: false; error: string }>((_, reject) =>
             setTimeout(() => reject(new Error('SMTP timeout after 30s')), 30000)

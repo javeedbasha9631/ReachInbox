@@ -15,13 +15,14 @@ enum EmailStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  googleId  String   @unique
-  name      String
-  email     String   @unique
-  avatar    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  googleId     String   @unique
+  name         String
+  email        String   @unique
+  avatar       String?
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   emails Email[]
 }

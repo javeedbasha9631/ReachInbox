@@ -18,8 +18,9 @@ export function googleAuth(req: Request, res: Response): void {
     return;
   }
   passport.authenticate('google', {
-    scope: ['profile', 'email'],
-    prompt: 'select_account',
+    scope: ['profile', 'email', 'https://www.googleapis.com/auth/gmail.send'],
+    accessType: 'offline',
+    prompt: 'consent',
   })(req, res);
 }
 

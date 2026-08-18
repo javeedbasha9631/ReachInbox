@@ -24,8 +24,10 @@ export function configurePassport(): void {
         clientSecret: config.google.clientSecret,
         callbackURL: config.google.callbackUrl,
         proxy: true,
-      },
-      async (_accessToken: string, _refreshToken: string, profile: any, done: VerifyCallback) => {
+        scope: ['profile', 'email', 'https://www.googleapis.com/auth/gmail.send'],
+        prompt: 'consent',
+      } as any,
+      async (_accessToken: string, refreshToken: string, profile: any, done: VerifyCallback) => {
         try {
           const googleId = profile.id;
           const email = profile.emails?.[0]?.value;
@@ -36,10 +38,21 @@ export function configurePassport(): void {
             return done(new Error('No email found in Google profile'));
           }
 
+          const updateData: any = { name, email, avatar };
+          if (refreshToken) {
+            updateData.refreshToken = refreshToken;
+          }
+
           const user = await prisma.user.upsert({
             where: { googleId },
-            update: { name, email, avatar },
-            create: { googleId, name, email, avatar },
+            update: updateData,
+            create: {
+              googleId,
+              name,
+              email,
+              avatar,
+              refreshToken: refreshToken || null,
+            },
           });
 
           return done(null, {

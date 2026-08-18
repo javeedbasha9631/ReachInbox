@@ -1,5 +1,6 @@
-import { Resend } from 'resend';
+import { google } from 'googleapis';
 import { config } from '../config';
+import prisma from '../db/prisma';
 
 interface SendResult {
   success: boolean;
@@ -7,16 +8,47 @@ interface SendResult {
   error?: string;
 }
 
-let _resend: Resend | null = null;
-
-function getResend(): Resend {
-  if (!_resend) {
-    if (!config.resend.apiKey) {
-      throw new Error('RESEND_API_KEY not configured');
-    }
-    _resend = new Resend(config.resend.apiKey);
+async function getGmailClient(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.refreshToken) {
+    throw new Error('Gmail not authorized. Please sign in with Google again to grant email sending permission.');
   }
-  return _resend;
+
+  const oauth2Client = new google.auth.OAuth2(
+    config.google.clientId,
+    config.google.clientSecret,
+    'postmessage'
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: user.refreshToken,
+  });
+
+  return google.gmail({ version: 'v1', auth: oauth2Client });
+}
+
+function createRawEmail(
+  fromName: string,
+  fromEmail: string,
+  to: string,
+  subject: string,
+  htmlBody: string
+): string {
+  const message = [
+    `From: ${fromName} <${fromEmail}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset="UTF-8"`,
+    ``,
+    htmlBody,
+  ].join('\r\n');
+
+  return Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 export async function sendEmail(
@@ -24,42 +56,38 @@ export async function sendEmail(
   senderName: string,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  userId?: string
 ): Promise<SendResult> {
   try {
-    const resend = getResend();
-    const htmlBody = body.replace(/\n/g, '<br>');
-
-    const fromAddress = config.resend.fromEmail || 'onboarding@resend.dev';
-    const displayName = senderName || 'ReachInbox';
-    const from = `${displayName} <${fromAddress}>`;
-
-    const { data, error } = await resend.emails.send({
-      from,
-      to: [to],
-      subject,
-      html: `<div style="font-family: Arial, sans-serif;">${htmlBody}</div>`,
-    });
-
-    if (error) {
-      console.error(`Resend email failed to ${to}:`, error.message);
-      return {
-        success: false,
-        error: error.message,
-      };
+    if (!userId) {
+      throw new Error('User ID required for Gmail API');
     }
 
-    console.log(`Email sent to ${to}, ID: ${data?.id}`);
+    const gmail = await getGmailClient(userId);
+    const htmlBody = body.replace(/\n/g, '<br>');
+    const fromEmail = config.gmail.user || from;
+    const displayName = senderName || 'ReachInbox';
+
+    const raw = createRawEmail(displayName, fromEmail, to, subject, `<div style="font-family: Arial, sans-serif;">${htmlBody}</div>`);
+
+    const result = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw },
+    });
+
+    console.log(`Email sent to ${to}, Gmail ID: ${result.data.id}`);
     return {
       success: true,
-      messageId: data?.id || 'unknown',
+      messageId: result.data.id || 'unknown',
     };
   } catch (error) {
-    const err = error as Error;
-    console.error(`Email send failed to ${to}:`, err.message);
+    const err = error as any;
+    const message = err?.message || 'Unknown error';
+    console.error(`Email send failed to ${to}:`, message);
     return {
       success: false,
-      error: err.message,
+      error: message,
     };
   }
 }
