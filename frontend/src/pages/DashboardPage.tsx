@@ -10,19 +10,26 @@ import { Email } from '../types';
 import { emailApi } from '../services/api';
 
 type Tab = 'scheduled' | 'sent' | 'history';
+type StatusFilter = 'all' | 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED';
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({ label, value, color, active, onClick }: { label: string; value: number; color: string; active: boolean; onClick: () => void }) {
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+    <button
+      onClick={onClick}
+      className={`bg-gray-800 rounded-xl border p-5 text-left transition-all hover:border-gray-500 ${
+        active ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-gray-700'
+      }`}
+    >
       <p className="text-gray-400 text-sm mb-1">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
-    </div>
+    </button>
   );
 }
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('scheduled');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [composeOpen, setComposeOpen] = useState(false);
   const [detailEmail, setDetailEmail] = useState<Email | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -30,13 +37,26 @@ export default function DashboardPage() {
   const sent = useSentEmails();
   const history = useEmailHistory();
 
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setStatusFilter('all');
+  };
+
   const handleRefresh = () => {
     if (activeTab === 'scheduled') scheduled.refresh();
     else if (activeTab === 'sent') sent.refresh();
     else history.refresh();
   };
 
-  const activeData = activeTab === 'scheduled' ? scheduled : activeTab === 'sent' ? sent : { emails: history.emails, loading: history.loading, error: history.error };
+  const filteredHistoryEmails = history.emails.filter(
+    (e) => statusFilter === 'all' || e.status === statusFilter
+  );
+
+  const activeData = activeTab === 'scheduled'
+    ? scheduled
+    : activeTab === 'sent'
+      ? sent
+      : { emails: filteredHistoryEmails, loading: history.loading, error: history.error };
 
   const handleRowClick = (email: Email) => {
     setDetailEmail(email);
@@ -63,7 +83,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
           <button
-            onClick={() => setActiveTab('scheduled')}
+            onClick={() => handleTabChange('scheduled')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'scheduled' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
@@ -71,7 +91,7 @@ export default function DashboardPage() {
             Scheduled
           </button>
           <button
-            onClick={() => setActiveTab('sent')}
+            onClick={() => handleTabChange('sent')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'sent' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
@@ -79,7 +99,7 @@ export default function DashboardPage() {
             Sent
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => handleTabChange('history')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
@@ -101,11 +121,11 @@ export default function DashboardPage() {
 
       {activeTab === 'history' && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <StatCard label="Total" value={history.stats.total} color="text-white" />
-          <StatCard label="Scheduled" value={history.stats.scheduled} color="text-blue-400" />
-          <StatCard label="Processing" value={history.stats.processing} color="text-yellow-400" />
-          <StatCard label="Sent" value={history.stats.sent} color="text-green-400" />
-          <StatCard label="Failed" value={history.stats.failed} color="text-red-400" />
+          <StatCard label="Total" value={history.stats.total} color="text-white" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+          <StatCard label="Scheduled" value={history.stats.scheduled} color="text-blue-400" active={statusFilter === 'SCHEDULED'} onClick={() => setStatusFilter('SCHEDULED')} />
+          <StatCard label="Processing" value={history.stats.processing} color="text-yellow-400" active={statusFilter === 'PROCESSING'} onClick={() => setStatusFilter('PROCESSING')} />
+          <StatCard label="Sent" value={history.stats.sent} color="text-green-400" active={statusFilter === 'SENT'} onClick={() => setStatusFilter('SENT')} />
+          <StatCard label="Failed" value={history.stats.failed} color="text-red-400" active={statusFilter === 'FAILED'} onClick={() => setStatusFilter('FAILED')} />
         </div>
       )}
 
@@ -114,7 +134,7 @@ export default function DashboardPage() {
           <h3 className="text-sm font-medium text-gray-400">
             {activeTab === 'scheduled' && `${scheduled.emails.length} scheduled email(s)`}
             {activeTab === 'sent' && `${sent.emails.length} sent email(s)`}
-            {activeTab === 'history' && `${history.emails.length} total email(s)`}
+            {activeTab === 'history' && `${filteredHistoryEmails.length} email(s)`}
           </h3>
           <div className="flex items-center gap-3">
             {activeTab === 'history' && history.emails.length > 0 && (
@@ -140,7 +160,9 @@ export default function DashboardPage() {
           <ErrorState message={activeData.error} onRetry={handleRefresh} />
         ) : activeData.emails.length === 0 ? (
           <EmptyState
-            message={`No ${activeTab} emails yet`}
+            message={activeTab === 'history' && statusFilter !== 'all'
+              ? `No emails found`
+              : `No ${activeTab} emails yet`}
             actionLabel={activeTab === 'scheduled' ? 'Schedule your first email' : undefined}
             onAction={activeTab === 'scheduled' ? () => setComposeOpen(true) : undefined}
           />
