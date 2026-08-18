@@ -14,7 +14,7 @@ export const config = {
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/auth/google/callback',
+    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'https://frontend-brown-nine-81.vercel.app/auth/google/callback',
   },
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   workerConcurrency: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
