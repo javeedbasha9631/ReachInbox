@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env*
+*.md
+.vercel
+.fly.toml
+docker-compose.yml
+frontend
