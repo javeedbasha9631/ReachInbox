@@ -162,7 +162,8 @@ export async function getScheduledEmails(req: Request, res: Response): Promise<v
     res.json({ success: true, data: emails });
   } catch (error) {
     console.error('Get scheduled emails error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch scheduled emails' });
+    const msg = error instanceof Error ? error.message : 'Failed to fetch scheduled emails';
+    res.status(500).json({ success: false, error: msg });
   }
 }
 
@@ -185,7 +186,8 @@ export async function getSentEmails(req: Request, res: Response): Promise<void> 
     res.json({ success: true, data: emails });
   } catch (error) {
     console.error('Get sent emails error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch sent emails' });
+    const msg = error instanceof Error ? error.message : 'Failed to fetch sent emails';
+    res.status(500).json({ success: false, error: msg });
   }
 }
 
@@ -213,7 +215,8 @@ export async function getHistoryEmails(req: Request, res: Response): Promise<voi
     res.json({ success: true, data: { emails, stats } });
   } catch (error) {
     console.error('Get history emails error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch email history' });
+    const msg = error instanceof Error ? error.message : 'Failed to fetch email history';
+    res.status(500).json({ success: false, error: msg });
   }
 }
 
