@@ -52,7 +52,6 @@ model Email {
   jobId        String      @unique
   attempts     Int         @default(0)
   error        String?
-  previewUrl   String?
   hourlyLimit  Int         @default(100)
   delayMs      Int         @default(2000)
   createdAt    DateTime    @default(now())
