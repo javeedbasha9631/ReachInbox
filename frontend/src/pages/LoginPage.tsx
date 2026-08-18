@@ -117,7 +117,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-6">
-          Powered by Brevo Email Service
+          Powered by Gmail SMTP
         </p>
       </div>
     </div>
