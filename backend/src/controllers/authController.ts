@@ -24,19 +24,14 @@ export function googleAuth(req: Request, res: Response): void {
 }
 
 export function googleCallback(req: Request, res: Response): void {
-  passport.authenticate('google', { failureRedirect: `${config.frontendUrl}/login` }, (err: any, user: any) => {
+  passport.authenticate('google', { session: false, failureRedirect: `${config.frontendUrl}/login` }, (err: any, user: any) => {
     if (err || !user) {
+      console.error('Google callback error:', err);
       res.redirect(`${config.frontendUrl}/login`);
       return;
     }
-    req.login(user, (loginErr) => {
-      if (loginErr) {
-        res.redirect(`${config.frontendUrl}/login`);
-        return;
-      }
-      const token = generateToken(user);
-      res.redirect(`${config.frontendUrl}/dashboard?token=${token}`);
-    });
+    const token = generateToken(user);
+    res.redirect(`${config.frontendUrl}/dashboard?token=${token}`);
   })(req, res);
 }
 
