@@ -5,8 +5,20 @@
       "destination": "https://reachinbox-backend-production-e3f2.up.railway.app/api/:path*"
     },
     {
+      "source": "/auth/config",
+      "destination": "https://reachinbox-backend-production-e3f2.up.railway.app/auth/config"
+    },
+    {
       "source": "/auth/google/callback",
       "destination": "https://reachinbox-backend-production-e3f2.up.railway.app/auth/google/callback"
+    },
+    {
+      "source": "/auth/me",
+      "destination": "https://reachinbox-backend-production-e3f2.up.railway.app/auth/me"
+    },
+    {
+      "source": "/auth/logout",
+      "destination": "https://reachinbox-backend-production-e3f2.up.railway.app/auth/logout"
     },
     {
       "source": "/((?!assets/|favicon.ico|.*\\.js$|.*\\.css$|.*\\.png$|.*\\.svg$).*)",
