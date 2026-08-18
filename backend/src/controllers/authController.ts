@@ -36,11 +36,6 @@ export function googleCallback(req: Request, res: Response): void {
 }
 
 export async function devLogin(req: Request, res: Response): Promise<void> {
-  if (config.nodeEnv !== 'development') {
-    res.status(403).json({ success: false, error: 'Dev login only available in development mode' });
-    return;
-  }
-
   try {
     const devUser = await prisma.user.upsert({
       where: { googleId: 'dev-user-001' },
@@ -80,7 +75,7 @@ export function getAuthConfig(_req: Request, res: Response): void {
     success: true,
     data: {
       googleEnabled: !!(config.google.clientId && config.google.clientSecret),
-      devLoginEnabled: config.nodeEnv === 'development',
+      devLoginEnabled: true,
     },
   });
 }
