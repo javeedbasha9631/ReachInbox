@@ -8,7 +8,7 @@ async function main() {
     await prisma.$connect();
     console.log('PostgreSQL connected');
 
-    startEmailWorker();
+    await startEmailWorker();
     console.log('Email worker started');
 
     const server = app.listen(config.port, () => {

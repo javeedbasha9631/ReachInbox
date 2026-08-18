@@ -9,11 +9,33 @@ import { getEmailQueue } from '../queues/emailQueue';
 
 let _worker: Worker | null = null;
 
+const STUCK_TIMEOUT_MS = 5 * 60 * 1000;
+
+export async function recoverStuckEmails(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STUCK_TIMEOUT_MS);
+    const stuck = await prisma.email.updateMany({
+      where: {
+        status: 'PROCESSING',
+        updatedAt: { lt: cutoff },
+      },
+      data: { status: 'SCHEDULED' },
+    });
+    if (stuck.count > 0) {
+      console.log(`Recovered ${stuck.count} stuck PROCESSING email(s) back to SCHEDULED`);
+    }
+  } catch (err) {
+    console.error('Failed to recover stuck emails:', err);
+  }
+}
+
 export function getEmailWorker(): Worker | null {
   return _worker;
 }
 
-export function startEmailWorker(): Worker {
+export async function startEmailWorker(): Promise<Worker> {
+  await recoverStuckEmails();
+
   const connection = createRedisConnection();
   const rateLimiter = new RateLimiter(connection);
 
@@ -82,13 +104,29 @@ export function startEmailWorker(): Worker {
 
       const fromEmail = config.gmail.user;
 
-      const result = await sendEmail(
-        fromEmail,
-        senderName || 'ReachInbox',
-        recipient,
-        subject,
-        body
-      );
+      let result;
+      try {
+        result = await Promise.race([
+          sendEmail(
+            fromEmail,
+            senderName || 'ReachInbox',
+            recipient,
+            subject,
+            body
+          ),
+          new Promise<{ success: false; error: string }>((_, reject) =>
+            setTimeout(() => reject(new Error('SMTP timeout after 30s')), 30000)
+          ),
+        ]);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Send failed';
+        console.error(`Email ${emailId} send threw: ${errMsg}`);
+        await prisma.email.update({
+          where: { id: emailId },
+          data: { status: 'FAILED', error: errMsg },
+        });
+        return { success: false, error: errMsg };
+      }
 
       if (result.success) {
         await rateLimiter.increment(senderId);
@@ -120,9 +158,15 @@ export function startEmailWorker(): Worker {
     }
   );
 
-  _worker.on('failed', (job, error) => {
+  _worker.on('failed', async (job, error) => {
     if (!job) return;
     console.error(`Job ${job.id} failed for email ${job.data.emailId}:`, error.message);
+    try {
+      await prisma.email.update({
+        where: { id: job.data.emailId },
+        data: { status: 'FAILED', error: error.message },
+      });
+    } catch {}
   });
 
   _worker.on('completed', (job, result) => {
