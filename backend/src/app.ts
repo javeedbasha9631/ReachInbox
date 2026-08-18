@@ -52,7 +52,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', version: 'gmail-api-v2', timestamp: new Date().toISOString() });
 });
 
 app.use('/auth', authRoutes);

@@ -11,13 +11,7 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (!config.resend.apiKey) {
-      res.status(400).json({
-        success: false,
-        error: 'Email service not configured. Please set RESEND_API_KEY in the backend environment variables.',
-      });
-      return;
-    }
+
 
     const {
       subject,
@@ -71,11 +65,11 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
     if (!defaultSender) {
       defaultSender = await prisma.sender.create({
         data: {
-          email: config.resend.fromEmail,
-          smtpHost: 'resend',
+          email: config.gmail.user,
+          smtpHost: 'gmail-api',
           smtpPort: 443,
-          smtpUser: 'resend',
-          smtpPassword: 'resend',
+          smtpUser: config.gmail.user,
+          smtpPassword: 'gmail-api',
         },
       });
     }
