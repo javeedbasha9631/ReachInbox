@@ -8,25 +8,151 @@ import { EmailJobData } from '../types';
 import { getEmailQueue } from '../queues/emailQueue';
 
 let _worker: Worker | null = null;
+let _safetyInterval: ReturnType<typeof setInterval> | null = null;
 
-const STUCK_TIMEOUT_MS = 5 * 60 * 1000;
+const STUCK_TIMEOUT_MS = 2 * 60 * 1000;
+const SAFETY_POLL_MS = 15 * 1000;
 
 export async function recoverStuckEmails(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - STUCK_TIMEOUT_MS);
-    const stuck = await prisma.email.updateMany({
+    const stuck = await prisma.email.findMany({
       where: {
         status: 'PROCESSING',
         updatedAt: { lt: cutoff },
       },
-      data: { status: 'SCHEDULED' },
     });
-    if (stuck.count > 0) {
-      console.log(`Recovered ${stuck.count} stuck PROCESSING email(s) back to SCHEDULED`);
+
+    if (stuck.length === 0) return;
+
+    console.log(`Recovering ${stuck.length} stuck PROCESSING email(s)`);
+
+    for (const email of stuck) {
+      try {
+        const queue = getEmailQueue();
+        const bullJobId = `email-${email.id}-recovery-${Date.now()}`;
+        await queue.add('send-email', {
+          emailId: email.id,
+          userId: email.userId,
+          senderId: email.senderId,
+          recipient: email.recipient,
+          subject: email.subject,
+          body: email.body,
+          hourlyLimit: email.hourlyLimit,
+          delayMs: email.delayMs,
+          senderName: 'ReachInbox',
+        } as EmailJobData, {
+          delay: 0,
+          jobId: bullJobId,
+          removeOnComplete: 100,
+          removeOnFail: 200,
+        });
+
+        await prisma.email.update({
+          where: { id: email.id },
+          data: { status: 'SCHEDULED', jobId: bullJobId },
+        });
+
+        console.log(`Re-queued stuck email ${email.id}`);
+      } catch (err) {
+        console.error(`Failed to recover email ${email.id}:`, err);
+      }
     }
   } catch (err) {
     console.error('Failed to recover stuck emails:', err);
   }
+}
+
+async function processDirectly(emailId: string): Promise<void> {
+  const email = await prisma.email.findUnique({ where: { id: emailId } });
+  if (!email || email.status !== 'SCHEDULED') return;
+
+  const now = Date.now();
+  const scheduledMs = email.scheduledAt.getTime();
+  if (scheduledMs > now) return;
+
+  console.log(`Direct-send: processing overdue email ${emailId}`);
+
+  await prisma.email.update({
+    where: { id: emailId },
+    data: { status: 'PROCESSING', attempts: { increment: 1 } },
+  });
+
+  const rateLimiter = new RateLimiter(createRedisConnection());
+  const rateCheck = await rateLimiter.canSend(email.senderId, email.hourlyLimit);
+  if (!rateCheck.allowed) {
+    await prisma.email.update({
+      where: { id: emailId },
+      data: { status: 'SCHEDULED' },
+    });
+    console.log(`Direct-send: rate limited for ${emailId}, will retry later`);
+    return;
+  }
+
+  try {
+    const result = await Promise.race([
+      sendEmail(
+        config.gmail.user,
+        'ReachInbox',
+        email.recipient,
+        email.subject,
+        email.body
+      ),
+      new Promise<{ success: false; error: string }>((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP timeout after 30s')), 30000)
+      ),
+    ]);
+
+    if (result.success) {
+      await rateLimiter.increment(email.senderId);
+      await prisma.email.update({
+        where: { id: emailId },
+        data: { status: 'SENT', sentAt: new Date(), error: null },
+      });
+      console.log(`Direct-send: email ${emailId} sent to ${email.recipient}`);
+    } else {
+      await prisma.email.update({
+        where: { id: emailId },
+        data: { status: 'FAILED', error: result.error || 'Send failed' },
+      });
+      console.error(`Direct-send: email ${emailId} failed: ${result.error}`);
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Send failed';
+    await prisma.email.update({
+      where: { id: emailId },
+      data: { status: 'FAILED', error: errMsg },
+    });
+    console.error(`Direct-send: email ${emailId} threw: ${errMsg}`);
+  }
+}
+
+async function safetyNetPoll(): Promise<void> {
+  try {
+    const overdue = await prisma.email.findMany({
+      where: {
+        status: 'SCHEDULED',
+        scheduledAt: { lte: new Date() },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: 10,
+    });
+
+    if (overdue.length > 0) {
+      console.log(`Safety net: found ${overdue.length} overdue email(s)`);
+    }
+
+    for (const email of overdue) {
+      await processDirectly(email.id);
+    }
+  } catch (err) {
+    console.error('Safety net poll error:', err);
+  }
+}
+
+async function recoverAndProcess(): Promise<void> {
+  await recoverStuckEmails();
+  await safetyNetPoll();
 }
 
 export function getEmailWorker(): Worker | null {
@@ -34,7 +160,7 @@ export function getEmailWorker(): Worker | null {
 }
 
 export async function startEmailWorker(): Promise<Worker> {
-  await recoverStuckEmails();
+  await recoverAndProcess();
 
   const connection = createRedisConnection();
   const rateLimiter = new RateLimiter(connection);
@@ -176,11 +302,22 @@ export async function startEmailWorker(): Promise<Worker> {
     console.log(`Job ${job.id} completed for email ${job.data.emailId}`);
   });
 
+  _safetyInterval = setInterval(() => {
+    recoverAndProcess().catch((err) => {
+      console.error('Safety net error:', err);
+    });
+  }, SAFETY_POLL_MS);
+
   console.log(`Email worker started with concurrency ${config.workerConcurrency}`);
+  console.log(`Safety net polling every ${SAFETY_POLL_MS / 1000}s`);
   return _worker;
 }
 
 export async function stopEmailWorker(): Promise<void> {
+  if (_safetyInterval) {
+    clearInterval(_safetyInterval);
+    _safetyInterval = null;
+  }
   if (_worker) {
     await _worker.close();
     _worker = null;

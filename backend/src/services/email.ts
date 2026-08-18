@@ -20,6 +20,9 @@ function getTransporter(): nodemailer.Transporter {
         user: config.gmail.user,
         pass: config.gmail.appPassword,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
   }
   return _transporter;
@@ -51,6 +54,9 @@ export async function sendEmail(
   } catch (error) {
     const err = error as Error;
     console.error(`Email send failed to ${to}:`, err.message);
+
+    _transporter = null;
+
     return {
       success: false,
       error: err.message,
