@@ -13,4 +13,4 @@ RUN npx tsc
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/server.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate 2>&1 || true && node dist/server.js"]
