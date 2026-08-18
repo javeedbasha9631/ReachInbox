@@ -20,8 +20,10 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const API_BASE = 'https://reachinbox-backend-production-e3f2.up.railway.app';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
