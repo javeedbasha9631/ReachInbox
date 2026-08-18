@@ -1,7 +1,16 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import passport from 'passport';
 import { config } from '../config';
 import prisma from '../db/prisma';
+
+function generateToken(user: { id: string; googleId: string; name: string; email: string; avatar?: string }): string {
+  return jwt.sign(
+    { id: user.id, googleId: user.googleId, name: user.name, email: user.email, avatar: user.avatar },
+    config.jwt.secret,
+    { expiresIn: config.jwt.expiresIn as string }
+  );
+}
 
 export function googleAuth(req: Request, res: Response): void {
   if (!config.google.clientId || !config.google.clientSecret) {
@@ -15,9 +24,19 @@ export function googleAuth(req: Request, res: Response): void {
 }
 
 export function googleCallback(req: Request, res: Response): void {
-  passport.authenticate('google', {
-    failureRedirect: `${config.frontendUrl}/login`,
-    successRedirect: `${config.frontendUrl}/dashboard`,
+  passport.authenticate('google', { failureRedirect: `${config.frontendUrl}/login` }, (err: any, user: any) => {
+    if (err || !user) {
+      res.redirect(`${config.frontendUrl}/login`);
+      return;
+    }
+    req.login(user, (loginErr) => {
+      if (loginErr) {
+        res.redirect(`${config.frontendUrl}/login`);
+        return;
+      }
+      const token = generateToken(user);
+      res.redirect(`${config.frontendUrl}/dashboard?token=${token}`);
+    });
   })(req, res);
 }
 
@@ -52,7 +71,8 @@ export async function devLogin(req: Request, res: Response): Promise<void> {
         res.status(500).json({ success: false, error: 'Login failed' });
         return;
       }
-      res.json({ success: true, data: userPayload });
+      const token = generateToken(userPayload);
+      res.json({ success: true, data: userPayload, token });
     });
   } catch (error) {
     console.error('Dev login error:', error);
@@ -71,11 +91,25 @@ export function getAuthConfig(_req: Request, res: Response): void {
 }
 
 export function getMe(req: Request, res: Response): void {
-  if (!req.isAuthenticated() || !req.user) {
-    res.status(401).json({ success: false, error: 'Not authenticated' });
+  if (req.isAuthenticated() && req.user) {
+    res.json({ success: true, data: req.user });
     return;
   }
-  res.json({ success: true, data: req.user });
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, config.jwt.secret) as any;
+      res.json({ success: true, data: decoded });
+      return;
+    } catch {
+      res.status(401).json({ success: false, error: 'Invalid or expired token' });
+      return;
+    }
+  }
+
+  res.status(401).json({ success: false, error: 'Not authenticated' });
 }
 
 export function logout(req: Request, res: Response): void {

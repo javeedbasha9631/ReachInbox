@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { authApi } from '../services/api';
+import { authApi, setToken } from '../services/api';
+
+const API_BASE = 'https://reachinbox-backend-production-e3f2.up.railway.app';
 
 export default function LoginPage() {
   const { isAuthenticated, loading } = useAuth();
@@ -22,13 +24,16 @@ export default function LoginPage() {
   }, [isAuthenticated, loading]);
 
   const handleGoogleLogin = () => {
-    window.location.href = '/auth/google';
+    window.location.href = `${API_BASE}/auth/google`;
   };
 
   const handleDevLogin = async () => {
     setDevLoading(true);
     try {
-      await authApi.devLogin();
+      const res = await authApi.devLogin();
+      if (res.token) {
+        setToken(res.token);
+      }
       window.location.href = '/dashboard';
     } catch {
       setDevLoading(false);

@@ -32,4 +32,8 @@ export const config = {
     user: process.env.GMAIL_USER || '',
     appPassword: process.env.GMAIL_APP_PASSWORD || '',
   },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production',
+    expiresIn: '7d',
+  },
 };

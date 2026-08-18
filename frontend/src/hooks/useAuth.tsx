@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { authApi } from '../services/api';
+import { authApi, setToken, getToken, removeToken } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -23,9 +23,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(response.data as User);
       } else {
         setUser(null);
+        removeToken();
       }
     } catch {
       setUser(null);
+      removeToken();
     } finally {
       setLoading(false);
     }
@@ -38,10 +40,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore
     } finally {
       setUser(null);
+      removeToken();
     }
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      setToken(token);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     refreshUser();
   }, [refreshUser]);
 

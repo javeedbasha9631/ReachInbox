@@ -1,12 +1,39 @@
 import axios from 'axios';
 import { ApiResponse, User, Email, Sender, ScheduleEmailPayload, ScheduleEmailResponse, EmailHistoryResponse } from '../types';
 
+const TOKEN_KEY = 'reachinbox_token';
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function removeToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 const api = axios.create({
   baseURL: '/api',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use((cfg) => {
+  const token = getToken();
+  if (token) {
+    cfg.headers.set('Authorization', `Bearer ${token}`);
+  }
+  return cfg;
 });
 
 export interface AuthConfig {
@@ -20,18 +47,24 @@ export const authApi = {
     return data;
   },
 
-  devLogin: async (): Promise<ApiResponse<User>> => {
+  devLogin: async (): Promise<ApiResponse<User> & { token?: string }> => {
     const { data } = await axios.post('/auth/dev-login', {}, { withCredentials: true });
     return data;
   },
 
   getMe: async (): Promise<ApiResponse<User>> => {
-    const { data } = await axios.get('/auth/me', { withCredentials: true });
+    const { data } = await axios.get('/auth/me', {
+      withCredentials: true,
+      headers: { ...authHeaders() },
+    });
     return data;
   },
 
   logout: async (): Promise<ApiResponse> => {
-    const { data } = await axios.post('/auth/logout', {}, { withCredentials: true });
+    const { data } = await axios.post('/auth/logout', {}, {
+      withCredentials: true,
+      headers: { ...authHeaders() },
+    });
     return data;
   },
 };
