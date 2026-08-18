@@ -19,13 +19,7 @@ router.get('/google', (req, res) => {
   })(req, res);
 });
 
-router.get(
-  '/google/callback',
-  passport.authenticate('google', {
-    failureRedirect: `${config.frontendUrl}/login`,
-    successRedirect: `${config.frontendUrl}/dashboard`,
-  })
-);
+router.get('/google/callback', googleCallback);
 
 router.post('/dev-login', devLogin);
 router.get('/me', requireAuth, getMe);
