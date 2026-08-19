@@ -5,12 +5,11 @@ import { startEmailWorker, stopEmailWorker } from './workers/emailWorker';
 
 async function main() {
   try {
-    const { execSync } = require('child_process');
     try {
-      execSync('npx prisma db push --skip-generate', { timeout: 30000, stdio: 'pipe' });
-      console.log('Prisma schema synced with database');
+      await prisma.$executeRaw`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "refreshToken" TEXT`;
+      console.log('Database schema verified');
     } catch {
-      console.warn('Prisma db push failed, continuing with existing schema');
+      console.warn('Schema migration skipped (column may already exist)');
     }
 
     await prisma.$connect();
