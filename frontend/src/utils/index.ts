@@ -2,23 +2,33 @@ export function parseCsvOrText(content: string): string[] {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const lines = content.split(/[\n\r]+/);
 
+  const seen = new Set<string>();
   const emails: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
+    const candidates: string[] = [];
+
     if (emailRegex.test(trimmed)) {
-      emails.push(trimmed);
+      candidates.push(trimmed);
     } else if (trimmed.includes(',')) {
-      const parts = trimmed.split(',');
-      for (const part of parts) {
+      for (const part of trimmed.split(',')) {
         const cleaned = part.trim().replace(/^["']|["']$/g, '');
         if (emailRegex.test(cleaned)) {
-          emails.push(cleaned);
+          candidates.push(cleaned);
         }
+      }
+    }
+
+    for (const email of candidates) {
+      const key = email.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        emails.push(email);
       }
     }
   }
 
-  return [...new Set(emails)];
+  return emails;
 }
 
 export function formatDate(dateStr: string): string {

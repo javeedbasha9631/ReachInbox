@@ -44,6 +44,16 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
       return;
     }
 
+    const seen = new Set<string>();
+    const uniqueRecipients: string[] = [];
+    for (const r of validRecipients) {
+      const key = r.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueRecipients.push(r);
+      }
+    }
+
     const start = new Date(startTime);
     if (isNaN(start.getTime())) {
       res.status(400).json({ success: false, error: 'Invalid start time' });
@@ -81,8 +91,8 @@ export async function scheduleEmails(req: Request, res: Response): Promise<void>
 
     const createdEmails = [];
 
-    for (let i = 0; i < validRecipients.length; i++) {
-      const recipient = validRecipients[i];
+    for (let i = 0; i < uniqueRecipients.length; i++) {
+      const recipient = uniqueRecipients[i];
 
       const emailRecord = await prisma.email.create({
         data: {
