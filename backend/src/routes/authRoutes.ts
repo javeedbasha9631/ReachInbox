@@ -14,8 +14,9 @@ router.get('/google', (req, res) => {
     return;
   }
   passport.authenticate('google', {
-    scope: ['profile', 'email'],
-    prompt: 'select_account',
+    scope: ['profile', 'email', 'https://www.googleapis.com/auth/gmail.send'],
+    accessType: 'offline',
+    prompt: 'consent',
     session: false,
   })(req, res);
 });
