@@ -3,6 +3,7 @@ import prisma from '../db/prisma';
 import { addEmailJob } from '../queues/emailQueue';
 import { config } from '../config';
 import { ScheduleEmailRequest } from '../types';
+import { retryEmail } from '../workers/emailWorker';
 
 export async function scheduleEmails(req: Request, res: Response): Promise<void> {
   try {
@@ -262,6 +263,50 @@ export async function clearHistory(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error('Clear history error:', error);
     res.status(500).json({ success: false, error: 'Failed to clear history' });
+  }
+}
+
+export async function retryEmailById(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+    const email = await prisma.email.findFirst({
+      where: { id, userId: req.user.id },
+    });
+
+    if (!email) {
+      res.status(404).json({ success: false, error: 'Email not found' });
+      return;
+    }
+
+    if (email.status !== 'FAILED') {
+      res.status(400).json({ success: false, error: 'Only failed emails can be retried' });
+      return;
+    }
+
+    const result = await retryEmail(id);
+
+    if (result.success) {
+      const updated = await prisma.email.findUnique({
+        where: { id },
+        include: { sender: { select: { id: true, email: true } } },
+      });
+      res.json({ success: true, data: updated, message: 'Email retry successful' });
+    } else {
+      const updated = await prisma.email.findUnique({
+        where: { id },
+        include: { sender: { select: { id: true, email: true } } },
+      });
+      res.json({ success: false, data: updated, error: result.error || 'Retry failed' });
+    }
+  } catch (error) {
+    console.error('Retry email error:', error);
+    const msg = error instanceof Error ? error.message : 'Failed to retry email';
+    res.status(500).json({ success: false, error: msg });
   }
 }
 

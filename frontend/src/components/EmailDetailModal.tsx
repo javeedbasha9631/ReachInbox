@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Email } from '../types';
 import { StatusBadge } from './UIComponents';
 import { formatDate } from '../utils';
@@ -6,10 +7,20 @@ interface EmailDetailModalProps {
   email: Email | null;
   isOpen: boolean;
   onClose: () => void;
+  onRetry?: (email: Email) => void;
 }
 
-export default function EmailDetailModal({ email, isOpen, onClose }: EmailDetailModalProps) {
+export default function EmailDetailModal({ email, isOpen, onClose, onRetry }: EmailDetailModalProps) {
+  const [retrying, setRetrying] = useState(false);
+
   if (!isOpen || !email) return null;
+
+  const handleRetry = async () => {
+    if (!onRetry || !email) return;
+    setRetrying(true);
+    await onRetry(email);
+    setRetrying(false);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -90,7 +101,17 @@ export default function EmailDetailModal({ email, isOpen, onClose }: EmailDetail
           )}
         </div>
 
-        <div className="flex justify-end p-6 border-t border-gray-700">
+        <div className="flex justify-end gap-3 p-6 border-t border-gray-700">
+          {email.status === 'FAILED' && onRetry && (
+            <button
+              onClick={handleRetry}
+              disabled={retrying}
+              className="px-5 py-2.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded-lg hover:bg-yellow-500/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {retrying && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400"></div>}
+              {retrying ? 'Retrying...' : 'Retry'}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-5 py-2.5 text-gray-300 hover:text-white border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors"

@@ -7,9 +7,11 @@ interface EmailTableProps {
   showSentTime?: boolean;
   showAllColumns?: boolean;
   onRowClick?: (email: Email) => void;
+  onRetry?: (email: Email) => void;
+  retrying?: string | null;
 }
 
-export default function EmailTable({ emails, showSentTime = false, showAllColumns = false, onRowClick }: EmailTableProps) {
+export default function EmailTable({ emails, showSentTime = false, showAllColumns = false, onRowClick, onRetry, retrying }: EmailTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -29,6 +31,9 @@ export default function EmailTable({ emails, showSentTime = false, showAllColumn
             <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
             {showAllColumns && (
               <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Attempts</th>
+            )}
+            {onRetry && (
+              <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Action</th>
             )}
             {showSentTime && !showAllColumns && (
               <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Preview</th>
@@ -60,6 +65,21 @@ export default function EmailTable({ emails, showSentTime = false, showAllColumn
               </td>
               {showAllColumns && (
                 <td className="px-6 py-4 text-sm text-gray-400">{email.attempts}</td>
+              )}
+              {onRetry && (
+                <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                  {email.status === 'FAILED' ? (
+                    <button
+                      onClick={() => onRetry(email)}
+                      disabled={retrying === email.id}
+                      className="px-3 py-1 text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded-md hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {retrying === email.id ? 'Retrying...' : 'Retry'}
+                    </button>
+                  ) : (
+                    <span className="text-gray-600 text-xs">-</span>
+                  )}
+                </td>
               )}
               {showSentTime && !showAllColumns && (
                 <td className="px-6 py-4">

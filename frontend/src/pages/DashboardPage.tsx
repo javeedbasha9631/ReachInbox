@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [detailEmail, setDetailEmail] = useState<Email | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const scheduled = useScheduledEmails();
   const sent = useSentEmails();
   const history = useEmailHistory();
@@ -45,7 +46,12 @@ export default function DashboardPage() {
   const handleRefresh = () => {
     if (activeTab === 'scheduled') scheduled.refresh();
     else if (activeTab === 'sent') sent.refresh();
-    else history.refresh();
+    history.refresh();
+  };
+
+  const handleStatCardClick = (filter: StatusFilter) => {
+    setStatusFilter(filter);
+    setActiveTab('history');
   };
 
   const filteredHistoryEmails = history.emails.filter(
@@ -63,6 +69,26 @@ export default function DashboardPage() {
     setDetailOpen(true);
   };
 
+  const handleRetry = async (email: Email) => {
+    setRetrying(email.id);
+    try {
+      const res = await emailApi.retry(email.id);
+      if (res.success) {
+        toast.success('Email resent successfully');
+        history.refresh();
+        sent.refresh();
+        scheduled.refresh();
+      } else {
+        toast.error(res.error || 'Retry failed');
+        history.refresh();
+      }
+    } catch {
+      toast.error('Retry failed');
+    } finally {
+      setRetrying(null);
+    }
+  };
+
   const handleClearHistory = async () => {
     if (!confirm('Clear all sent/failed emails from history?')) return;
     try {
@@ -77,6 +103,8 @@ export default function DashboardPage() {
       toast.error('Failed to clear history');
     }
   };
+
+  const hasFailedEmails = activeData.emails.some((e) => e.status === 'FAILED');
 
   return (
     <div>
@@ -119,15 +147,13 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {activeTab === 'history' && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <StatCard label="Total" value={history.stats.total} color="text-white" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
-          <StatCard label="Scheduled" value={history.stats.scheduled} color="text-blue-400" active={statusFilter === 'SCHEDULED'} onClick={() => setStatusFilter('SCHEDULED')} />
-          <StatCard label="Processing" value={history.stats.processing} color="text-yellow-400" active={statusFilter === 'PROCESSING'} onClick={() => setStatusFilter('PROCESSING')} />
-          <StatCard label="Sent" value={history.stats.sent} color="text-green-400" active={statusFilter === 'SENT'} onClick={() => setStatusFilter('SENT')} />
-          <StatCard label="Failed" value={history.stats.failed} color="text-red-400" active={statusFilter === 'FAILED'} onClick={() => setStatusFilter('FAILED')} />
-        </div>
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <StatCard label="Total" value={history.stats.total} color="text-white" active={activeTab === 'history' && statusFilter === 'all'} onClick={() => handleStatCardClick('all')} />
+        <StatCard label="Scheduled" value={history.stats.scheduled} color="text-blue-400" active={activeTab === 'history' && statusFilter === 'SCHEDULED'} onClick={() => handleStatCardClick('SCHEDULED')} />
+        <StatCard label="Processing" value={history.stats.processing} color="text-yellow-400" active={activeTab === 'history' && statusFilter === 'PROCESSING'} onClick={() => handleStatCardClick('PROCESSING')} />
+        <StatCard label="Sent" value={history.stats.sent} color="text-green-400" active={activeTab === 'history' && statusFilter === 'SENT'} onClick={() => handleStatCardClick('SENT')} />
+        <StatCard label="Failed" value={history.stats.failed} color="text-red-400" active={activeTab === 'history' && statusFilter === 'FAILED'} onClick={() => handleStatCardClick('FAILED')} />
+      </div>
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700">
@@ -172,6 +198,8 @@ export default function DashboardPage() {
             showSentTime={activeTab === 'sent'}
             showAllColumns={activeTab === 'history'}
             onRowClick={activeTab === 'history' ? handleRowClick : undefined}
+            onRetry={hasFailedEmails ? handleRetry : undefined}
+            retrying={retrying}
           />
         )}
       </div>
@@ -181,6 +209,7 @@ export default function DashboardPage() {
         onClose={() => setComposeOpen(false)}
         onScheduled={() => {
           scheduled.refresh();
+          history.refresh();
           toast.success('Refreshed scheduled emails');
         }}
         defaultSenderName={user?.name || ''}
@@ -193,6 +222,7 @@ export default function DashboardPage() {
           setDetailOpen(false);
           setDetailEmail(null);
         }}
+        onRetry={handleRetry}
       />
     </div>
   );

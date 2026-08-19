@@ -108,6 +108,11 @@ export const emailApi = {
     const { data } = await api.delete('/emails/history/clear');
     return data;
   },
+
+  retry: async (id: string): Promise<ApiResponse<Email>> => {
+    const { data } = await api.post(`/emails/${id}/retry`);
+    return data;
+  },
 };
 
 export const senderApi = {

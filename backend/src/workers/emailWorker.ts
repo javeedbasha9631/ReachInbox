@@ -9,9 +9,10 @@ import { getEmailQueue } from '../queues/emailQueue';
 
 let _worker: Worker | null = null;
 let _safetyInterval: ReturnType<typeof setInterval> | null = null;
+let _rateLimiter: RateLimiter | null = null;
 
 const STUCK_TIMEOUT_MS = 2 * 60 * 1000;
-const SAFETY_POLL_MS = 15 * 1000;
+const SAFETY_POLL_MS = 10 * 1000;
 
 export async function recoverStuckEmails(): Promise<void> {
   try {
@@ -63,7 +64,14 @@ export async function recoverStuckEmails(): Promise<void> {
   }
 }
 
-async function processDirectly(emailId: string): Promise<void> {
+function getRateLimiter(): RateLimiter {
+  if (!_rateLimiter) {
+    _rateLimiter = new RateLimiter(createRedisConnection());
+  }
+  return _rateLimiter;
+}
+
+export async function processDirectly(emailId: string): Promise<void> {
   const email = await prisma.email.findUnique({ where: { id: emailId } });
   if (!email || email.status !== 'SCHEDULED') return;
 
@@ -78,7 +86,7 @@ async function processDirectly(emailId: string): Promise<void> {
     data: { status: 'PROCESSING', attempts: { increment: 1 } },
   });
 
-  const rateLimiter = new RateLimiter(createRedisConnection());
+  const rateLimiter = getRateLimiter();
   const rateCheck = await rateLimiter.canSend(email.senderId, email.hourlyLimit);
   if (!rateCheck.allowed) {
     await prisma.email.update({
@@ -136,7 +144,7 @@ async function safetyNetPoll(): Promise<void> {
         scheduledAt: { lte: new Date() },
       },
       orderBy: { scheduledAt: 'asc' },
-      take: 10,
+      take: 50,
     });
 
     if (overdue.length > 0) {
@@ -158,6 +166,74 @@ async function recoverAndProcess(): Promise<void> {
 
 export function getEmailWorker(): Worker | null {
   return _worker;
+}
+
+export async function retryEmail(emailId: string): Promise<{ success: boolean; error?: string }> {
+  const email = await prisma.email.findUnique({ where: { id: emailId } });
+  if (!email) {
+    return { success: false, error: 'Email not found' };
+  }
+  if (email.status !== 'FAILED') {
+    return { success: false, error: 'Only failed emails can be retried' };
+  }
+
+  console.log(`Retrying email ${emailId}`);
+
+  await prisma.email.update({
+    where: { id: emailId },
+    data: { status: 'PROCESSING', attempts: { increment: 1 }, error: null },
+  });
+
+  const rateLimiter = getRateLimiter();
+  const rateCheck = await rateLimiter.canSend(email.senderId, email.hourlyLimit);
+  if (!rateCheck.allowed) {
+    await prisma.email.update({
+      where: { id: emailId },
+      data: { status: 'FAILED', error: 'Rate limit reached, try again later' },
+    });
+    return { success: false, error: 'Rate limit reached, try again later' };
+  }
+
+  try {
+    const result = await Promise.race([
+      sendEmail(
+        config.gmail.user,
+        'ReachInbox',
+        email.recipient,
+        email.subject,
+        email.body,
+        email.userId
+      ),
+      new Promise<{ success: false; error: string }>((_, reject) =>
+        setTimeout(() => reject(new Error('Send timeout after 30s')), 30000)
+      ),
+    ]);
+
+    if (result.success) {
+      await rateLimiter.increment(email.senderId);
+      await prisma.email.update({
+        where: { id: emailId },
+        data: { status: 'SENT', sentAt: new Date(), error: null },
+      });
+      console.log(`Retry: email ${emailId} sent to ${email.recipient}`);
+      return { success: true };
+    } else {
+      await prisma.email.update({
+        where: { id: emailId },
+        data: { status: 'FAILED', error: result.error || 'Send failed' },
+      });
+      console.error(`Retry: email ${emailId} failed: ${result.error}`);
+      return { success: false, error: result.error };
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Send failed';
+    await prisma.email.update({
+      where: { id: emailId },
+      data: { status: 'FAILED', error: errMsg },
+    });
+    console.error(`Retry: email ${emailId} threw: ${errMsg}`);
+    return { success: false, error: errMsg };
+  }
 }
 
 export async function startEmailWorker(): Promise<Worker> {
@@ -311,7 +387,7 @@ export async function startEmailWorker(): Promise<Worker> {
   }, SAFETY_POLL_MS);
 
   console.log(`Email worker started with concurrency ${config.workerConcurrency}`);
-  console.log(`Safety net polling every ${SAFETY_POLL_MS / 1000}s`);
+  console.log(`Safety net polling every ${SAFETY_POLL_MS / 1000}s (batch: 50)`);
   return _worker;
 }
 
