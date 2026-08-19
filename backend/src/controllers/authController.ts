@@ -117,9 +117,10 @@ export function grantGmail(req: Request, res: Response): void {
     res.status(400).json({ success: false, error: 'Google OAuth not configured' });
     return;
   }
+  const gmailCallbackUrl = `${new URL(config.google.callbackUrl).origin}/auth/grant-gmail/callback`;
   const params = new URLSearchParams({
     client_id: config.google.clientId,
-    redirect_uri: `${config.google.callbackUrl}`,
+    redirect_uri: gmailCallbackUrl,
     response_type: 'code',
     scope: 'https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
@@ -136,6 +137,7 @@ export async function grantGmailCallback(req: Request, res: Response): Promise<v
     return;
   }
   const userId = state.replace('gmail-grant:', '');
+  const gmailCallbackUrl = `${new URL(config.google.callbackUrl).origin}/auth/grant-gmail/callback`;
   try {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -145,7 +147,7 @@ export async function grantGmailCallback(req: Request, res: Response): Promise<v
         client_secret: config.google.clientSecret,
         code: code as string,
         grant_type: 'authorization_code',
-        redirect_uri: `${config.google.callbackUrl}`,
+        redirect_uri: gmailCallbackUrl,
       }),
     });
     const tokenData = await tokenRes.json() as any;

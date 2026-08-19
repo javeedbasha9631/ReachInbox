@@ -91,6 +91,10 @@ export async function sendEmail(
     const data = await response.json() as any;
     if (!response.ok) {
       const msg = data.error?.message || 'Gmail API send failed';
+      if (msg.includes('insufficient authentication scopes') || msg.includes('insufficient_scope')) {
+        console.error(`Email send failed to ${to}: Gmail authorization required. Please connect Gmail.`);
+        return { success: false, error: 'Gmail authorization required. Please connect/re-authorize Gmail.' };
+      }
       console.error(`Email send failed to ${to}:`, msg);
       return { success: false, error: msg };
     }
