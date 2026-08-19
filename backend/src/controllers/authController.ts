@@ -25,13 +25,15 @@ export function googleAuth(req: Request, res: Response): void {
 }
 
 export function googleCallback(req: Request, res: Response): void {
+  console.log('Google callback received - code:', !!req.query.code, 'state:', !!req.query.state);
   passport.authenticate('google', { session: false, failureRedirect: `${config.frontendUrl}/login` }, (err: any, user: any) => {
     if (err || !user) {
-      console.error('Google callback error:', err);
+      console.error('Google callback error:', err?.message || err || 'No user returned');
       res.redirect(`${config.frontendUrl}/login`);
       return;
     }
     const token = generateToken(user);
+    console.log(`Google login success for ${user.email}, redirecting to dashboard`);
     res.redirect(`${config.frontendUrl}/dashboard?token=${token}`);
   })(req, res);
 }
