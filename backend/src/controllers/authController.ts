@@ -101,10 +101,33 @@ export async function getGmailStatus(req: Request, res: Response): Promise<void>
     return;
   }
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  res.json({
-    success: true,
-    data: { connected: !!user?.refreshToken },
-  });
+  if (!user?.refreshToken) {
+    res.json({ success: true, data: { connected: false } });
+    return;
+  }
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.google.clientId,
+        client_secret: config.google.clientSecret,
+        refresh_token: user.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    const tokenData = await tokenRes.json() as any;
+    if (!tokenRes.ok) {
+      res.json({ success: true, data: { connected: false } });
+      return;
+    }
+    const checkRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    res.json({ success: true, data: { connected: checkRes.ok } });
+  } catch {
+    res.json({ success: true, data: { connected: false } });
+  }
 }
 
 export function grantGmail(req: Request, res: Response): void {
