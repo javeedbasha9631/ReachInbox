@@ -12,13 +12,24 @@ function generateToken(user: { id: string; googleId: string; name: string; email
   );
 }
 
+function getUserIdFromReq(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), config.jwt.secret) as any;
+      return decoded.id;
+    } catch {}
+  }
+  return null;
+}
+
 export function googleAuth(req: Request, res: Response): void {
   if (!config.google.clientId || !config.google.clientSecret) {
     res.status(400).json({ success: false, error: 'Google OAuth not configured' });
     return;
   }
   passport.authenticate('google', {
-    scope: ['profile', 'email', 'https://www.googleapis.com/auth/gmail.send'],
+    scope: ['profile', 'email'],
     accessType: 'offline',
     prompt: 'consent',
   })(req, res);
@@ -81,6 +92,78 @@ export function getAuthConfig(_req: Request, res: Response): void {
       devLoginEnabled: true,
     },
   });
+}
+
+export async function getGmailStatus(req: Request, res: Response): Promise<void> {
+  const userId = getUserIdFromReq(req);
+  if (!userId) {
+    res.status(401).json({ success: false, error: 'Not authenticated' });
+    return;
+  }
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  res.json({
+    success: true,
+    data: { connected: !!user?.refreshToken },
+  });
+}
+
+export function grantGmail(req: Request, res: Response): void {
+  const userId = getUserIdFromReq(req);
+  if (!userId) {
+    res.status(401).json({ success: false, error: 'Not authenticated' });
+    return;
+  }
+  if (!config.google.clientId || !config.google.clientSecret) {
+    res.status(400).json({ success: false, error: 'Google OAuth not configured' });
+    return;
+  }
+  const params = new URLSearchParams({
+    client_id: config.google.clientId,
+    redirect_uri: `${config.google.callbackUrl}`,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/gmail.send',
+    access_type: 'offline',
+    prompt: 'consent',
+    state: `gmail-grant:${userId}`,
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+}
+
+export async function grantGmailCallback(req: Request, res: Response): Promise<void> {
+  const { code, state } = req.query;
+  if (!code || !state || typeof state !== 'string' || !state.startsWith('gmail-grant:')) {
+    res.redirect(`${config.frontendUrl}/dashboard?gmail_grant=failed`);
+    return;
+  }
+  const userId = state.replace('gmail-grant:', '');
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.google.clientId,
+        client_secret: config.google.clientSecret,
+        code: code as string,
+        grant_type: 'authorization_code',
+        redirect_uri: `${config.google.callbackUrl}`,
+      }),
+    });
+    const tokenData = await tokenRes.json() as any;
+    if (!tokenRes.ok || !tokenData.refresh_token) {
+      console.error('Gmail grant token exchange failed:', tokenData);
+      res.redirect(`${config.frontendUrl}/dashboard?gmail_grant=failed`);
+      return;
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: tokenData.refresh_token },
+    });
+    console.log(`Gmail access granted for user ${userId}`);
+    res.redirect(`${config.frontendUrl}/dashboard?gmail_grant=success`);
+  } catch (err) {
+    console.error('Gmail grant error:', err);
+    res.redirect(`${config.frontendUrl}/dashboard?gmail_grant=failed`);
+  }
 }
 
 export function getMe(req: Request, res: Response): void {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import passport from 'passport';
-import { googleCallback, getMe, logout, devLogin, getAuthConfig } from '../controllers/authController';
+import { googleCallback, getMe, logout, devLogin, getAuthConfig, grantGmail, grantGmailCallback, getGmailStatus } from '../controllers/authController';
 import { requireAuth } from '../middleware/auth';
 import { config } from '../config';
 
@@ -14,7 +14,7 @@ router.get('/google', (req, res) => {
     return;
   }
   passport.authenticate('google', {
-    scope: ['profile', 'email', 'https://www.googleapis.com/auth/gmail.send'],
+    scope: ['profile', 'email'],
     accessType: 'offline',
     prompt: 'consent',
     session: false,
@@ -22,6 +22,9 @@ router.get('/google', (req, res) => {
 });
 
 router.get('/google/callback', googleCallback);
+router.get('/grant-gmail', grantGmail);
+router.get('/grant-gmail/callback', grantGmailCallback);
+router.get('/gmail-status', requireAuth, getGmailStatus);
 
 router.post('/dev-login', devLogin);
 router.get('/me', requireAuth, getMe);

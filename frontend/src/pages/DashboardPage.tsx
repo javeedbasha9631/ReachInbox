@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import ComposeEmailModal from '../components/ComposeEmailModal';
 import EmailDetailModal from '../components/EmailDetailModal';
@@ -7,7 +7,7 @@ import EmailTable from '../components/EmailTable';
 import { LoadingSpinner, EmptyState, ErrorState } from '../components/UIComponents';
 import { useAuth } from '../hooks/useAuth';
 import { Email } from '../types';
-import { emailApi } from '../services/api';
+import { emailApi, authApi } from '../services/api';
 
 type Tab = 'scheduled' | 'sent' | 'history';
 type StatusFilter = 'all' | 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED';
@@ -34,9 +34,29 @@ export default function DashboardPage() {
   const [detailEmail, setDetailEmail] = useState<Email | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [gmailConnected, setGmailConnected] = useState<boolean | null>(null);
   const scheduled = useScheduledEmails();
   const sent = useSentEmails();
   const history = useEmailHistory();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmailGrant = params.get('gmail_grant');
+    if (gmailGrant === 'success') {
+      toast.success('Gmail connected successfully');
+      setGmailConnected(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (gmailGrant === 'failed') {
+      toast.error('Gmail connection failed. Please try again.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    authApi.gmailStatus().then((res) => {
+      if (res.success && res.data) {
+        setGmailConnected(res.data.connected);
+      }
+    }).catch(() => {});
+  }, []);
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -146,6 +166,23 @@ export default function DashboardPage() {
           Compose
         </button>
       </div>
+
+      {gmailConnected === false && (
+        <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span className="text-yellow-300 text-sm">Gmail not connected. Emails will fail to send.</span>
+          </div>
+          <a
+            href={authApi.getGrantGmailUrl()}
+            className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-sm font-medium rounded-lg transition-colors border border-yellow-500/30"
+          >
+            Connect Gmail
+          </a>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard label="Total" value={history.stats.total} color="text-white" active={activeTab === 'history' && statusFilter === 'all'} onClick={() => handleStatCardClick('all')} />

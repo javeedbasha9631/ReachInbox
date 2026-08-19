@@ -71,6 +71,15 @@ export const authApi = {
     });
     return data;
   },
+
+  gmailStatus: async (): Promise<ApiResponse<{ connected: boolean }>> => {
+    const { data } = await axios.get(`${AUTH_BASE}/auth/gmail-status`, {
+      headers: { ...authHeaders() },
+    });
+    return data;
+  },
+
+  getGrantGmailUrl: (): string => `${AUTH_BASE}/auth/grant-gmail`,
 };
 
 export const emailApi = {
