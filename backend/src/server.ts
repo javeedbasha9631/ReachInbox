@@ -5,6 +5,14 @@ import { startEmailWorker, stopEmailWorker } from './workers/emailWorker';
 
 async function main() {
   try {
+    const { execSync } = require('child_process');
+    try {
+      execSync('npx prisma db push --skip-generate', { timeout: 30000, stdio: 'pipe' });
+      console.log('Prisma schema synced with database');
+    } catch {
+      console.warn('Prisma db push failed, continuing with existing schema');
+    }
+
     await prisma.$connect();
     console.log('PostgreSQL connected');
 
